@@ -296,12 +296,12 @@ def get_model(download_if_missing: bool = True):
 st.title("AI Skin Cancer Early Detection System")
 st.markdown("---")
 
-with st.spinner("Loading AI model..."):
+with st.spinner("Loading ..."):
     try:
         model = get_model()
-        st.success(" Model loaded successfully (96.94% test accuracy)")
+        st.success(" Model loaded")
     except Exception as e:
-        st.error(" Model could not be loaded. Check logs or model file.")
+        st.error(" error.")
         st.stop()
 
 # Sidebar
