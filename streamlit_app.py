@@ -1,4 +1,3 @@
-
 # app.py
 import os
 import io
@@ -20,7 +19,7 @@ MODEL_LOCAL_NAME = "my_model.keras"
 MODEL_ZIP_NAME = "model_download.zip"               
 MODEL_IS_ZIP = False 
 
-# ===== UPDATED: 6 ACTUAL CLASSES FROM YOUR MODEL =====
+# ===== 6 ACTUAL CLASSES FROM YOUR MODEL =====
 CLASS_NAMES = [
     "Actinic Keratosis / Intraepithelial Carcinoma",
     "Basal Cell Carcinoma",
@@ -192,6 +191,36 @@ def get_last_conv_layer(model: tf.keras.Model) -> Optional[str]:
                     last_conv = layer.name
     return last_conv
 
+def check_if_out_of_distribution(predictions, confidence_threshold=70.0, entropy_threshold=1.5):
+    """
+    Detect if an image is out-of-distribution (not a skin lesion)
+    
+    Args:
+        predictions: Model predictions (softmax outputs)
+        confidence_threshold: Minimum confidence % for top prediction
+        entropy_threshold: Maximum entropy (higher = more uncertain)
+    
+    Returns:
+        (is_ood, reasons)
+    """
+    max_prob = np.max(predictions) * 100
+    
+    reasons = []
+    
+    # Check confidence
+    if max_prob < confidence_threshold:
+        reasons.append(f"Low confidence: {max_prob:.1f}% (need ≥{confidence_threshold}%)")
+    
+    # Check entropy (spread of probabilities)
+    entropy = -np.sum(predictions * np.log(predictions + 1e-10))
+    
+    if entropy > entropy_threshold:
+        reasons.append(f"High uncertainty: {entropy:.2f} (threshold: {entropy_threshold})")
+    
+    is_ood = len(reasons) > 0
+    
+    return is_ood, reasons, entropy, max_prob
+
 def grad_cam_plus_plus(model, image, class_idx, layer_name):
     """Robust Grad-CAM++ implementation."""
     grad_model = tf.keras.models.Model([model.inputs], [model.get_layer(layer_name).output, model.output])
@@ -290,6 +319,25 @@ layer_name = st.sidebar.text_input(
 )
 show_gradcam = st.sidebar.checkbox("Show Grad-CAM++ Heatmap", value=True)
 
+# OOD Detection Settings
+st.sidebar.markdown("---")
+st.sidebar.markdown("### 🛡️ Image Validation")
+confidence_threshold = st.sidebar.slider(
+    "Confidence Threshold (%)", 
+    min_value=50, 
+    max_value=90, 
+    value=70,
+    help="Minimum confidence to accept prediction"
+)
+entropy_threshold = st.sidebar.slider(
+    "Uncertainty Threshold", 
+    min_value=1.0, 
+    max_value=2.5, 
+    value=1.5,
+    step=0.1,
+    help="Maximum uncertainty (entropy) allowed"
+)
+
 st.sidebar.markdown("---")
 st.sidebar.markdown("### 📋 About")
 st.sidebar.info(
@@ -335,6 +383,52 @@ if uploaded_file is not None:
             pred_idx = int(np.argmax(preds[0]))
             pred_class = CLASS_NAMES[pred_idx] if pred_idx < len(CLASS_NAMES) else f"Class {pred_idx}"
             pred_prob = float(preds[0, pred_idx]) * 100
+            
+            # OOD Detection
+            is_ood, ood_reasons, entropy, max_prob = check_if_out_of_distribution(
+                preds[0], 
+                confidence_threshold=confidence_threshold,
+                entropy_threshold=entropy_threshold
+            )
+        
+        if is_ood:
+            st.error("🚫 **Invalid Image Detected**")
+            
+            st.warning(
+                "**This doesn't appear to be a valid skin lesion image.**\n\n"
+                "**Detected issues:**\n" + 
+                "\n".join(f"- {r}" for r in ood_reasons) + 
+                "\n\n**Please upload:**\n"
+                "✅ A close-up photo of a skin lesion\n"
+                "✅ Clear, well-lit image\n"
+                "✅ Dermatoscopic or clinical photograph\n"
+                "✅ Image in focus\n\n"
+                "**Do NOT upload:**\n"
+                "❌ Random objects (balls, food, animals, etc.)\n"
+                "❌ Full body photos\n"
+                "❌ Blurry or dark images\n"
+                "❌ Screenshots or edited images"
+            )
+            
+            with st.expander("🔍 Technical Details (for debugging)"):
+                st.write(f"**Top prediction:** {pred_class}")
+                st.write(f"**Confidence:** {pred_prob:.2f}%")
+                st.write(f"**Entropy:** {entropy:.2f}")
+                st.write(f"**Confidence threshold:** {confidence_threshold}%")
+                st.write(f"**Entropy threshold:** {entropy_threshold}")
+                
+                st.markdown("**All probabilities:**")
+                prob_data = []
+                for i, name in enumerate(CLASS_NAMES):
+                    prob = float(preds[0, i]) * 100
+                    prob_data.append({"Class": name, "Probability": f"{prob:.2f}%"})
+                st.dataframe(pd.DataFrame(prob_data), hide_index=True)
+            
+            st.info("💡 **Tip:** Adjust the validation thresholds in the sidebar if you believe this is a valid image.")
+            st.stop()
+        
+        # Valid image - continue normally
+        st.success(f"✅ Valid lesion detected")
 
         # Get class info
         class_info = CLASS_REPORTS[pred_class]
@@ -432,13 +526,18 @@ if uploaded_file is not None:
     st.markdown("### 📥 Download Report")
     
     report_text = f"""SKIN LESION ANALYSIS REPORT
-{'='*50}
+{'='*70}
 
 PREDICTION RESULTS:
 Detected Condition: {pred_class}
 Confidence: {pred_prob:.2f}%
 Type: {class_info['type']}
 Severity: {class_info['severity']}
+
+VALIDATION METRICS:
+Entropy: {entropy:.2f} (threshold: {entropy_threshold})
+Confidence Threshold: {confidence_threshold}%
+Status: Valid skin lesion image
 
 DETAILED PROBABILITIES:
 """
@@ -453,7 +552,7 @@ DESCRIPTION:
 RECOMMENDATION:
 {class_info['recommendation']}
 
-{'='*50}
+{'='*70}
 IMPORTANT DISCLAIMER:
 This is an AI screening tool and should NOT replace professional 
 medical diagnosis. Always consult a qualified dermatologist for 
@@ -461,6 +560,7 @@ proper evaluation and treatment recommendations.
 
 Report generated: {pd.Timestamp.now().strftime('%Y-%m-%d %H:%M:%S')}
 Model Accuracy: 96.94% (on test dataset)
+Image File: {uploaded_file.name}
 """
 
     st.download_button(
@@ -499,3 +599,27 @@ else:
     st.success("✅ **96.94% accuracy** on test dataset with 1,800 images")
     st.info("✅ Trained on 12,000 dermatoscopic images")
     st.info("✅ Based on ResNet50 architecture with custom attention mechanism")
+    
+    st.markdown("---")
+    st.markdown("### ✅ Image Requirements")
+    col_a, col_b = st.columns(2)
+    
+    with col_a:
+        st.markdown("**✅ DO Upload:**")
+        st.markdown("""
+        - Close-up photos of skin lesions
+        - Clear, well-lit images
+        - Dermatoscopic images
+        - Clinical photographs
+        - Images in focus
+        """)
+    
+    with col_b:
+        st.markdown("**❌ DON'T Upload:**")
+        st.markdown("""
+        - Random objects (balls, food, etc.)
+        - Full body photos
+        - Blurry or dark images
+        - Screenshots or edited images
+        - Non-skin images
+        """)
