@@ -32,14 +32,14 @@ CLASS_NAMES = [
 CLASS_REPORTS = {
     "Actinic Keratosis / Intraepithelial Carcinoma": {
         "type": "Pre-cancerous",
-        "severity": "⚠️ Moderate Risk",
+        "severity": " Moderate Risk",
         "description": (
             "Actinic keratosis is a precancerous skin growth caused by sun damage. "
             "While not cancer itself, it can develop into squamous cell carcinoma if left untreated. "
             "These appear as rough, scaly patches on sun-exposed areas."
         ),
         "recommendation": (
-            "🏥 **Medical evaluation recommended.** Treatment options include cryotherapy, "
+            " **Medical evaluation recommended.** Treatment options include cryotherapy, "
             "topical medications, or photodynamic therapy. Regular monitoring is essential."
         ),
         "urgency": "medium",
@@ -48,14 +48,14 @@ CLASS_REPORTS = {
     
     "Basal Cell Carcinoma": {
         "type": "Cancer (malignant)",
-        "severity": "🔴 High Risk - Cancer Detected",
+        "severity": " High Risk - Cancer Detected",
         "description": (
             "Basal cell carcinoma is the most common form of skin cancer. It grows slowly "
             "and rarely spreads to other parts of the body, but can cause local tissue damage "
             "if left untreated. Often appears as a pearly or waxy bump."
         ),
         "recommendation": (
-            "🚨 **Immediate dermatologist consultation required.** Early treatment has excellent "
+            " **Immediate dermatologist consultation required.** Early treatment has excellent "
             "success rates. Treatment typically involves surgical removal, Mohs surgery, or radiation."
         ),
         "urgency": "high",
@@ -64,14 +64,14 @@ CLASS_REPORTS = {
     
     "Benign Keratosis": {
         "type": "Benign (non-cancerous)",
-        "severity": "✅ Low Risk",
+        "severity": " Low Risk",
         "description": (
             "Benign keratoses (including seborrheic keratoses) are harmless, non-cancerous "
             "skin growths. They're very common, especially with aging, and appear as brown, "
             "black, or tan growths with a waxy, scaly texture."
         ),
         "recommendation": (
-            "ℹ️ **No treatment necessary in most cases.** Monitor for changes in appearance. "
+            " **No treatment necessary in most cases.** Monitor for changes in appearance. "
             "Removal is optional for cosmetic reasons or if irritated by clothing."
         ),
         "urgency": "low",
@@ -80,14 +80,14 @@ CLASS_REPORTS = {
     
     "Melanocytic Nevus": {
         "type": "Benign (typically)",
-        "severity": "✅ Low Risk",
+        "severity": " Low Risk",
         "description": (
             "A melanocytic nevus (common mole) is a benign growth of melanocytes. "
             "Most people have 10-40 moles on their body. They're usually harmless but "
             "should be monitored for changes that could indicate melanoma."
         ),
         "recommendation": (
-            "👁️ **Monitor using the ABCDE rule:**\n\n"
+            "  **Monitor using the ABCDE rule:**\n\n"
             "- **A**symmetry: One half doesn't match the other\n"
             "- **B**order: Irregular, scalloped, or poorly defined\n"
             "- **C**olor: Varied colors (brown, black, tan, red, white, blue)\n"
@@ -101,14 +101,14 @@ CLASS_REPORTS = {
     
     "Melanoma": {
         "type": "Cancer (malignant)",
-        "severity": "🔴 HIGH RISK - Serious Cancer Detected",
+        "severity": " HIGH RISK - Serious Cancer Detected",
         "description": (
             "Melanoma is the most dangerous form of skin cancer. It develops in melanocytes "
             "(pigment-producing cells) and can spread rapidly to other organs if not caught early. "
             "Early detection and treatment are critical for survival."
         ),
         "recommendation": (
-            "🚨 **URGENT: See a dermatologist immediately.** Melanoma requires prompt medical "
+            " **URGENT: See a dermatologist immediately.** Melanoma requires prompt medical "
             "attention. Treatment may include surgical excision, immunotherapy, targeted therapy, "
             "or radiation. Early-stage melanoma has a high cure rate with proper treatment."
         ),
@@ -118,14 +118,14 @@ CLASS_REPORTS = {
     
     "Vascular / Dermatofibroma": {
         "type": "Benign (non-cancerous)",
-        "severity": "✅ Low Risk",
+        "severity": " Low Risk",
         "description": (
             "This category includes vascular lesions (such as hemangiomas or cherry angiomas) "
             "and dermatofibromas. These are benign growths that are harmless. Vascular lesions "
             "appear as red or purple spots, while dermatofibromas are firm bumps in the skin."
         ),
         "recommendation": (
-            "ℹ️ **No treatment needed unless causing discomfort.** These lesions are benign. "
+            " **No treatment needed unless causing discomfort.** These lesions are benign. "
             "Removal is optional for cosmetic reasons. Monitor for unusual changes."
         ),
         "urgency": "low",
@@ -134,7 +134,7 @@ CLASS_REPORTS = {
 }
 
 st.set_page_config(
-    page_title="Skin Cancer Detection AI", 
+    page_title=" AI Skin Cancer Early Detection", 
     page_icon="🔬",
     layout="wide"
 )
@@ -293,20 +293,19 @@ def get_model(download_if_missing: bool = True):
 # -------------------------
 # Streamlit UI
 # -------------------------
-st.title("🔬 Skin Cancer Detection System")
-st.markdown("*AI-Powered Early Screening Tool - ResNet50 with Attention Mechanism*")
+st.title("AI Skin Cancer Early Detection System")
 st.markdown("---")
 
-with st.spinner("Loading AI model..."):
-    try:
-        model = get_model()
-        st.success("✅ Model loaded successfully (96.94% test accuracy)")
-    except Exception as e:
-        st.error("❌ Model could not be loaded. Check logs or model file.")
-        st.stop()
+# with st.spinner("Loading AI model..."):
+#     try:
+#         model = get_model()
+#         st.success(" Model loaded successfully (96.94% test accuracy)")
+#     except Exception as e:
+#         st.error(" Model could not be loaded. Check logs or model file.")
+#         st.stop()
 
 # Sidebar
-st.sidebar.header("⚙️ Settings")
+st.sidebar.header(" Settings")
 default_layer = "conv5_block3_3_conv"
 detected_last_conv = get_last_conv_layer(model)
 if detected_last_conv is None:
@@ -321,7 +320,7 @@ show_gradcam = st.sidebar.checkbox("Show Grad-CAM++ Heatmap", value=True)
 
 # OOD Detection Settings
 st.sidebar.markdown("---")
-st.sidebar.markdown("### 🛡️ Image Validation")
+st.sidebar.markdown("###  Image Validation")
 confidence_threshold = st.sidebar.slider(
     "Confidence Threshold (%)", 
     min_value=50, 
@@ -337,18 +336,8 @@ entropy_threshold = st.sidebar.slider(
     step=0.1,
     help="Maximum uncertainty (entropy) allowed"
 )
-
-st.sidebar.markdown("---")
-st.sidebar.markdown("### 📋 About")
-st.sidebar.info(
-    "This AI system detects 6 types of skin lesions:\n\n"
-    "✅ Benign conditions\n"
-    "⚠️ Pre-cancerous lesions\n"
-    "🔴 Cancerous lesions"
-)
-
 # Main upload section
-st.markdown("### 📤 Upload Image")
+st.markdown("###  Upload Image")
 uploaded_file = st.file_uploader(
     "Choose a clear, well-lit image of the skin lesion",
     type=["jpg", "png", "jpeg"],
@@ -360,20 +349,20 @@ if uploaded_file is not None:
         image_data = uploaded_file.read()
         pil_img = Image.open(io.BytesIO(image_data)).convert("RGB")
     except Exception as e:
-        st.error("❌ Could not read the uploaded image.")
+        st.error(" Could not read the uploaded image.")
         st.stop()
 
     # Layout: Image on left, results on right
     col1, col2 = st.columns([1, 1.5])
 
     with col1:
-        st.markdown("#### 📸 Uploaded Image")
+        st.markdown("####  Uploaded Image")
         st.image(pil_img, use_column_width=True)
 
     with col2:
-        st.markdown("#### 🔍 Analysis Results")
+        st.markdown("####  Analysis Results")
         
-        with st.spinner("🔄 Analyzing image..."):
+        with st.spinner(" Analyzing image..."):
             input_img = preprocess_image_pil(pil_img, target_size=(224,224))
             preds = model.predict(input_img, verbose=0)
             
@@ -392,22 +381,22 @@ if uploaded_file is not None:
             )
         
         if is_ood:
-            st.error("🚫 **Invalid Image Detected**")
+            st.error(" **Invalid Image Detected**")
             
             st.warning(
                 "**This doesn't appear to be a valid skin lesion image.**\n\n"
                 "**Detected issues:**\n" + 
                 "\n".join(f"- {r}" for r in ood_reasons) + 
                 "\n\n**Please upload:**\n"
-                "✅ A close-up photo of a skin lesion\n"
-                "✅ Clear, well-lit image\n"
-                "✅ Dermatoscopic or clinical photograph\n"
-                "✅ Image in focus\n\n"
+                " A close-up photo of a skin lesion\n"
+                " Clear, well-lit image\n"
+                " Dermatoscopic or clinical photograph\n"
+                " Image in focus\n\n"
                 "**Do NOT upload:**\n"
-                "❌ Random objects (balls, food, animals, etc.)\n"
-                "❌ Full body photos\n"
-                "❌ Blurry or dark images\n"
-                "❌ Screenshots or edited images"
+                " Random objects (balls, food, animals, etc.)\n"
+                " Full body photos\n"
+                " Blurry or dark images\n"
+                " Screenshots or edited images"
             )
             
             with st.expander("🔍 Technical Details (for debugging)"):
@@ -424,11 +413,11 @@ if uploaded_file is not None:
                     prob_data.append({"Class": name, "Probability": f"{prob:.2f}%"})
                 st.dataframe(pd.DataFrame(prob_data), hide_index=True)
             
-            st.info("💡 **Tip:** Adjust the validation thresholds in the sidebar if you believe this is a valid image.")
+            st.info(" **Tip:** Adjust the validation thresholds in the sidebar if you believe this is a valid image.")
             st.stop()
         
         # Valid image - continue normally
-        st.success(f"✅ Valid lesion detected")
+        st.success(f" Valid lesion detected")
 
         # Get class info
         class_info = CLASS_REPORTS[pred_class]
@@ -453,11 +442,11 @@ if uploaded_file is not None:
     col3, col4 = st.columns(2)
     
     with col3:
-        st.markdown("### 📋 About This Condition")
+        st.markdown("###  About This Condition")
         st.info(class_info['description'])
     
     with col4:
-        st.markdown("### 💡 Recommended Action")
+        st.markdown("###  Recommended Action")
         urgency = class_info['urgency']
         if urgency in ["high", "critical"]:
             st.error(class_info['recommendation'])
@@ -468,7 +457,7 @@ if uploaded_file is not None:
 
     # Detailed probabilities
     st.markdown("---")
-    st.markdown("### 📊 Detailed Probability Breakdown")
+    st.markdown("###  Detailed Probability Breakdown")
     
     prob_data = []
     for i, name in enumerate(CLASS_NAMES):
@@ -483,7 +472,7 @@ if uploaded_file is not None:
     # Grad-CAM visualization
     if show_gradcam:
         st.markdown("---")
-        st.markdown("### 🔥 AI Focus Map (Grad-CAM++)")
+        st.markdown("###  AI Focus Map (Grad-CAM++)")
         st.markdown("*This heatmap shows which areas the AI focused on to make its prediction*")
         
         try:
@@ -517,13 +506,13 @@ if uploaded_file is not None:
                     st.image(overlay, caption="Overlay", use_column_width=True)
                 
             except Exception as e:
-                st.error("❌ Grad-CAM generation failed.")
+                st.error(" Grad-CAM generation failed.")
                 with st.expander("Show error details"):
                     st.code(str(e))
 
     # Download report
     st.markdown("---")
-    st.markdown("### 📥 Download Report")
+    st.markdown("###  Download Report")
     
     report_text = f"""SKIN LESION ANALYSIS REPORT
 {'='*70}
@@ -564,7 +553,7 @@ Image File: {uploaded_file.name}
 """
 
     st.download_button(
-        label="📄 Download Full Report (TXT)",
+        label=" Download Full Report (TXT)",
         data=report_text,
         file_name=f"skin_lesion_report_{pd.Timestamp.now().strftime('%Y%m%d_%H%M%S')}.txt",
         mime="text/plain"
@@ -573,7 +562,7 @@ Image File: {uploaded_file.name}
     # Disclaimer
     st.markdown("---")
     st.warning(
-        "⚠️ **MEDICAL DISCLAIMER:** This AI tool is designed for screening purposes only "
+        " **MEDICAL DISCLAIMER:** This AI tool is designed for screening purposes only "
         "and should not be used as a substitute for professional medical advice, diagnosis, "
         "or treatment. Always seek the advice of a qualified dermatologist or healthcare "
         "provider with any questions regarding a skin condition."
@@ -581,13 +570,13 @@ Image File: {uploaded_file.name}
 
 else:
     # No image uploaded - show info
-    st.info("👆 Please upload a skin lesion image to begin analysis")
+    st.info(" Please upload a skin lesion image to begin analysis")
     
     st.markdown("---")
-    st.markdown("### 📚 What This System Can Detect:")
+    st.markdown("###  What This System Can Detect:")
     
     for class_name in CLASS_NAMES:
-        with st.expander(f"ℹ️ {class_name}"):
+        with st.expander(f" {class_name}"):
             info = CLASS_REPORTS[class_name]
             st.markdown(f"**Type:** {info['type']}")
             st.markdown(f"**Severity:** {info['severity']}")
@@ -595,17 +584,17 @@ else:
             st.markdown(f"**Recommendation:** {info['recommendation']}")
     
     st.markdown("---")
-    st.markdown("### 🎯 Model Performance")
-    st.success("✅ **96.94% accuracy** on test dataset with 1,800 images")
-    st.info("✅ Trained on 12,000 dermatoscopic images")
-    st.info("✅ Based on ResNet50 architecture with custom attention mechanism")
+    st.markdown("###  Model Performance")
+    st.success(" **96.94% accuracy** ")
+    st.info(" Trained on dermatoscopic images")
+    st.info(" Based on ResNet50 architecture with custom attention mechanism")
     
     st.markdown("---")
-    st.markdown("### ✅ Image Requirements")
+    st.markdown("###  Image Requirements")
     col_a, col_b = st.columns(2)
     
     with col_a:
-        st.markdown("**✅ DO Upload:**")
+        st.markdown("** DO Upload:**")
         st.markdown("""
         - Close-up photos of skin lesions
         - Clear, well-lit images
@@ -615,7 +604,7 @@ else:
         """)
     
     with col_b:
-        st.markdown("**❌ DON'T Upload:**")
+        st.markdown("** DON'T Upload:**")
         st.markdown("""
         - Random objects (balls, food, etc.)
         - Full body photos
