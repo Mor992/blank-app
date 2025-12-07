@@ -270,7 +270,7 @@ def get_model(download_if_missing: bool = True):
     else:
         if not download_if_missing:
             raise FileNotFoundError(f"{MODEL_LOCAL_NAME} not found.")
-        st.info("Downloading model from Google Drive...")
+        st.info("Downloading model...")
         if MODEL_IS_ZIP:
             downloaded = download_model_from_drive(DRIVE_FILE_ID, MODEL_LOCAL_NAME, zip_dest=MODEL_ZIP_NAME, is_zip=True)
             with zipfile.ZipFile(downloaded, "r") as z:
