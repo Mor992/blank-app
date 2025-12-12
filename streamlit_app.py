@@ -1,4 +1,3 @@
-# app.py
 import os
 import io
 import zipfile
@@ -19,7 +18,6 @@ MODEL_LOCAL_NAME = "best_resnet.keras"
 MODEL_ZIP_NAME = "model_download.zip"               
 MODEL_IS_ZIP = False 
 
-# ===== 3 CLASSES FROM YOUR NEW MODEL =====
 CLASS_NAMES = [
     "Benign",
     "Malignant", 
@@ -85,11 +83,10 @@ CLASS_REPORTS = {
 }
 
 st.set_page_config(
-    page_title="AI Skin Lesion Classifier", 
+    page_title="AI Skin Cancer Detiction", 
     page_icon="🔬",
     layout="wide"
 )
-
 # -------------------------
 # Utility Functions
 # -------------------------
@@ -111,7 +108,7 @@ def safe_load_model(path: str):
         model = tf.keras.models.load_model(path)
         return model
     except Exception as e:
-        st.error("Failed to load model. See logs for details.")
+        st.error("Failed to load model.")
         st.write("Model loading error:", e)
         raise
 
@@ -163,9 +160,9 @@ def get_last_conv_layer(model: tf.keras.Model) -> Optional[str]:
     return last_conv
 
 def check_if_out_of_distribution(predictions, confidence_threshold=70.0, entropy_threshold=1.1):
-    """
-    Detect if an image is out-of-distribution (not a skin lesion)
-    """
+    # """
+    # Detect if an image is out-of-distribution (not a skin lesion)
+    # """
     max_prob = np.max(predictions) * 100
     
     reasons = []
@@ -183,7 +180,7 @@ def check_if_out_of_distribution(predictions, confidence_threshold=70.0, entropy
     return is_ood, reasons, entropy, max_prob
 
 def simple_grad_cam(model, image, class_idx, layer_name='conv5_block3_out'):
-    """Enhanced Grad-CAM implementation."""
+    # """Enhanced Grad-CAM implementation."""
     try:
         grad_model = tf.keras.models.Model(
             [model.inputs],
@@ -239,7 +236,7 @@ def get_model(download_if_missing: bool = True):
     else:
         if not download_if_missing:
             raise FileNotFoundError(f"{MODEL_LOCAL_NAME} not found.")
-        st.info("Downloading model...")
+        # st.info("Downloading model...")
         if MODEL_IS_ZIP:
             downloaded = download_model_from_drive(DRIVE_FILE_ID, MODEL_LOCAL_NAME, zip_dest=MODEL_ZIP_NAME, is_zip=True)
             with zipfile.ZipFile(downloaded, "r") as z:
@@ -262,14 +259,14 @@ def get_model(download_if_missing: bool = True):
 # -------------------------
 # Streamlit UI
 # -------------------------
-st.title("AI Skin Lesion Classifier")
-st.markdown("**3-Class Classification: Benign • Malignant • Nevus**")
+st.title("AI Skin_Cancer Detiction")
+st.markdown("** Benign(Not_Cancer) • Malignant(Cancer) • Nevus(Not_Cancer)**")
 st.markdown("---")
 
 with st.spinner("Loading model..."):
     try:
         model = get_model()
-        st.success("Model loaded successfully")
+        # st.success("Model loaded successfully")
     except Exception as e:
         st.error("Model loading error.")
         st.stop()
@@ -286,7 +283,7 @@ layer_name = st.sidebar.text_input(
     value=detected_last_conv,
     help="Leave as default for automatic detection"
 )
-show_gradcam = st.sidebar.checkbox("Show Grad-CAM Visualization", value=True)
+show_gradcam = st.sidebar.checkbox("Grad-CAM ", value=True)
 
 # OOD Detection Settings
 st.sidebar.markdown("---")
@@ -307,6 +304,28 @@ entropy_threshold = st.sidebar.slider(
     help="Maximum uncertainty (entropy) for 3 classes"
 )
 
+st.markdown("---")
+st.markdown("### Image Requirements")
+col_a, col_b = st.columns(2)
+    with col_a:
+        st.markdown("**DO Upload:**")
+        st.markdown("""
+        - Close-up photos of skin lesions
+        - Clear, well-lit images
+        - Dermatoscopic images
+        - Clinical photographs
+        - Images in focus
+        """)
+    
+    with col_b:
+        st.markdown("**DON'T Upload:**")
+        st.markdown("""
+        - Random objects
+        - Full body photos
+        - Blurry or dark images
+        - Screenshots
+        - Non-skin images
+        """)
 # Main upload section
 st.markdown("### Upload Image")
 uploaded_file = st.file_uploader(
@@ -382,8 +401,6 @@ if uploaded_file is not None:
             
             st.stop()
         
-        # Valid image
-        st.success(f"Valid lesion detected")
 
         class_info = CLASS_REPORTS[pred_class]
         
@@ -421,7 +438,7 @@ if uploaded_file is not None:
 
     # Probabilities
     st.markdown("---")
-    st.markdown("### Detailed Probability Breakdown")
+    st.markdown("### Probability")
     
     prob_data = []
     for i, name in enumerate(CLASS_NAMES):
@@ -436,8 +453,7 @@ if uploaded_file is not None:
     # Enhanced Grad-CAM (only overlay)
     if show_gradcam:
         st.markdown("---")
-        st.markdown("### AI Focus Visualization (Grad-CAM)")
-        st.markdown("*Shows which areas the AI analyzed to make its prediction*")
+        st.markdown("### (Grad-CAM)")
         
         layers_to_try = [layer_name, 'conv5_block3_out', 'conv5_block2_out', 'conv4_block6_out']
         heatmap = None
@@ -446,7 +462,7 @@ if uploaded_file is not None:
         for try_layer in layers_to_try:
             try:
                 _ = model.get_layer(try_layer)
-                with st.spinner(f"Generating visualization using {try_layer}..."):
+                with st.spinner(f"Generating visualization"):
                     heatmap = simple_grad_cam(model, input_img.astype("float32"), pred_idx, try_layer)
                     
                     if heatmap is not None and np.max(heatmap) > 0:
@@ -469,9 +485,9 @@ if uploaded_file is not None:
                     st.image(pil_img, caption="Original Image", use_column_width=True)
                 
                 with col6:
-                    st.image(overlay, caption="AI Focus Areas (Red = High Attention)", use_column_width=True)
+                    st.image(overlay, caption="Focus Areas", use_column_width=True)
                 
-                st.caption("The heatmap overlay shows where the AI model focused its attention. Red/yellow areas indicate regions that most influenced the prediction.")
+                # st.caption("The heatmap overlay shows where the AI model focused its attention. Red/yellow areas indicate regions that most influenced the prediction.")
                 
             except Exception as e:
                 st.error("Grad-CAM visualization failed.")
@@ -522,7 +538,7 @@ Image File: {uploaded_file.name}
 """
 
     st.download_button(
-        label="Download Full Report (TXT)",
+        label="Report (TXT)",
         data=report_text,
         file_name=f"skin_lesion_report_{pd.Timestamp.now().strftime('%Y%m%d_%H%M%S')}.txt",
         mime="text/plain"
@@ -550,32 +566,10 @@ else:
             st.markdown(f"**Description:** {info['description']}")
             st.markdown(f"**Recommendation:** {info['recommendation']}")
     
-    st.markdown("---")
-    st.markdown("### Model Performance")
-    st.success("89.52% accuracy on test set")
-    st.info("Trained on 21,000 balanced images")
-    st.info("ResNet50 + SE Attention architecture")
+    # st.markdown("---")
+    # st.markdown("### Model Performance")
+    # st.success("89.52% accuracy on test set")
+    # st.info("Trained on 21,000 balanced images")
+    # st.info("ResNet50 + SE Attention architecture")
     
-    st.markdown("---")
-    st.markdown("### Image Requirements")
-    col_a, col_b = st.columns(2)
-    
-    with col_a:
-        st.markdown("**DO Upload:**")
-        st.markdown("""
-        - Close-up photos of skin lesions
-        - Clear, well-lit images
-        - Dermatoscopic images
-        - Clinical photographs
-        - Images in focus
-        """)
-    
-    with col_b:
-        st.markdown("**DON'T Upload:**")
-        st.markdown("""
-        - Random objects
-        - Full body photos
-        - Blurry or dark images
-        - Screenshots
-        - Non-skin images
-        """)
+
