@@ -305,28 +305,28 @@ entropy_threshold = st.sidebar.slider(
 )
 
 
-st.markdown("### Image Requirements")
-col_a, col_b = st.columns(2)
-with col_a:
-    st.markdown("**Upload:**")
-    st.markdown("""
-    - Close-up photos of skin lesions
-    - Clear, well-lit images
-    - Dermatoscopic images
-    - Clinical photographs
-    - Images in focus
-    """)
+# st.markdown("### Image Requirements")
+# col_a, col_b = st.columns(2)
+# with col_a:
+#     st.markdown("**Upload:**")
+#     st.markdown("""
+#     - Close-up photos of skin lesions
+#     - Clear, well-lit images
+#     - Dermatoscopic images
+#     - Clinical photographs
+#     - Images in focus
+#     """)
     
-with col_b:
-    st.markdown("**DON'T Upload:**")
-    st.markdown("""
-    - Random objects
-    - Full body photos
-    - Blurry or dark images
-    - Screenshots
-    - Non-skin images
-    """)
-st.markdown("---")
+# with col_b:
+#     st.markdown("**DON'T Upload:**")
+#     st.markdown("""
+#     - Random objects
+#     - Full body photos
+#     - Blurry or dark images
+#     - Screenshots
+#     - Non-skin images
+#     """)
+# st.markdown("---")
 
 # Main upload section
 st.markdown("### Upload Image")
@@ -557,6 +557,28 @@ else:
     # No image uploaded
     st.info("Please upload a skin lesion image to begin analysis")
     
+    st.markdown("---")
+    st.markdown("### Image Requirements")
+    col_a, col_b = st.columns(2)
+    with col_a:
+        st.markdown("**Upload:**")
+        st.markdown("""
+        - Close-up photos of skin lesions
+        - Clear, well-lit images
+        - Dermatoscopic images
+        - Clinical photographs
+        - Images in focus
+        """)
+        
+    with col_b:
+        st.markdown("**DON'T Upload:**")
+        st.markdown("""
+        - Random objects
+        - Full body photos
+        - Blurry or dark images
+        - Screenshots
+        - Non-skin images
+        """)
     st.markdown("---")
     st.markdown("### What This System Can Detect:")
     
