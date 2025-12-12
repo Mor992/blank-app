@@ -265,8 +265,19 @@ with st.spinner("Loading model..."):
 
 # Sidebar
 st.sidebar.header("⚙️ Settings")
-default_layer = detected_last_conv
+# Detect last conv layer first
 detected_last_conv = get_last_conv_layer(model)
+default_layer = detected_last_conv
+
+selected_layer = st.sidebar.selectbox(
+    "Choose convolution layer for Grad-CAM",
+    conv_layer_names,
+    index=conv_layer_names.index(default_layer) if default_layer in conv_layer_names else 0
+)
+
+if selected_layer:
+    layer_name = selected_layer
+
 if detected_last_conv is None:
     detected_last_conv = default_layer
 
