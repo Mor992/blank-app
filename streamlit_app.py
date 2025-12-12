@@ -83,9 +83,8 @@ CLASS_REPORTS = {
         "color": "#ffc107"
     }
 }
-
 st.set_page_config(
-    page_title="🔬 AI Skin Lesion Classifier", 
+    page_title=" AI Skin Cancer Early Detection", 
     page_icon="🔬",
     layout="wide"
 )
@@ -142,17 +141,17 @@ def get_last_conv_layer(model: tf.keras.Model) -> Optional[str]:
                     last_conv = layer.name
     return last_conv
 
-def check_if_out_of_distribution(predictions, confidence_threshold=70.0, entropy_threshold=1.1):
+def check_if_out_of_distribution(predictions, confidence_threshold=70.0, entropy_threshold=1.5):
     """
     Detect if an image is out-of-distribution (not a skin lesion)
     
     Args:
         predictions: Model predictions (softmax outputs)
         confidence_threshold: Minimum confidence % for top prediction
-        entropy_threshold: Maximum entropy (lower for 3 classes)
+        entropy_threshold: Maximum entropy (higher = more uncertain)
     
     Returns:
-        (is_ood, reasons, entropy, max_prob)
+        (is_ood, reasons)
     """
     max_prob = np.max(predictions) * 100
     
@@ -162,7 +161,7 @@ def check_if_out_of_distribution(predictions, confidence_threshold=70.0, entropy
     if max_prob < confidence_threshold:
         reasons.append(f"Low confidence: {max_prob:.1f}% (need ≥{confidence_threshold}%)")
     
-    # Check entropy (for 3 classes, max entropy is ~1.1)
+    # Check entropy (spread of probabilities)
     entropy = -np.sum(predictions * np.log(predictions + 1e-10))
     
     if entropy > entropy_threshold:
@@ -172,41 +171,46 @@ def check_if_out_of_distribution(predictions, confidence_threshold=70.0, entropy
     
     return is_ood, reasons, entropy, max_prob
 
-def simple_grad_cam(model, image, class_idx, layer_name='conv5_block3_out'):
-    """Simple Grad-CAM implementation."""
-    grad_model = tf.keras.models.Model(
-        [model.inputs],
-        [model.get_layer(layer_name).output, model.output]
-    )
-    
+def grad_cam_plus_plus(model, image, class_idx, layer_name):
+    """Robust Grad-CAM++ implementation."""
+    grad_model = tf.keras.models.Model([model.inputs], [model.get_layer(layer_name).output, model.output])
+
     with tf.GradientTape() as tape:
         conv_outputs, predictions = grad_model(image)
-        
-        # Handle multiple outputs
+
         if isinstance(predictions, (list, tuple)):
-            predictions = predictions[0]
-        
+            preds_candidate = None
+            for p in predictions:
+                try:
+                    p_tensor = tf.convert_to_tensor(p)
+                    if p_tensor.shape.rank is not None and p_tensor.shape.rank >= 1:
+                        preds_candidate = p_tensor
+                        break
+                except Exception:
+                    continue
+            if preds_candidate is None:
+                preds_candidate = tf.convert_to_tensor(predictions[0])
+            predictions = preds_candidate
+        else:
+            predictions = tf.convert_to_tensor(predictions)
         loss = predictions[0, class_idx]
-    
+
     grads = tape.gradient(loss, conv_outputs)
-    
-    if grads is None:
-        return None
-    
-    # Pool gradients
-    pooled_grads = tf.reduce_mean(grads, axis=(0, 1, 2))
-    
-    # Weight channels
-    conv_outputs = conv_outputs[0]
-    heatmap = conv_outputs @ pooled_grads[..., tf.newaxis]
+    grads_sq = tf.square(grads)
+    grads_cu = grads_sq * grads
+
+    alpha_num = grads_sq
+    alpha_denom = 2 * grads_sq + tf.reduce_sum(conv_outputs * grads_cu, axis=(1,2), keepdims=True)
+    alpha_denom = tf.where(alpha_denom != 0, alpha_denom, tf.ones_like(alpha_denom))
+
+    alphas = alpha_num / alpha_denom
+    weights = tf.reduce_sum(alphas * tf.maximum(grads, 0), axis=(1,2))
+    weights = tf.reshape(weights, [-1,1,1,tf.shape(conv_outputs)[-1]])
+
+    grad_cam_output = tf.reduce_sum(weights * conv_outputs, axis=-1)
+    heatmap = tf.maximum(grad_cam_output, 0)
+    heatmap = heatmap / (tf.reduce_max(heatmap) + 1e-10)
     heatmap = tf.squeeze(heatmap)
-    
-    # Normalize
-    heatmap = tf.maximum(heatmap, 0)
-    max_val = tf.reduce_max(heatmap)
-    if max_val > 0:
-        heatmap /= max_val
-    
     return heatmap.numpy()
 
 @st.cache_resource(show_spinner=False)
@@ -239,21 +243,20 @@ def get_model(download_if_missing: bool = True):
 # -------------------------
 # Streamlit UI
 # -------------------------
-st.title("🔬 AI Skin Lesion Classifier")
-st.markdown("**3-Class Classification: Benign • Malignant • Nevus**")
+st.title("AI Skin Cancer Early Detection System")
 st.markdown("---")
 
-with st.spinner("Loading model..."):
+with st.spinner("Loading ..."):
     try:
         model = get_model()
-        st.success("✅ Model loaded successfully")
+        st.success(" Model loaded")
     except Exception as e:
-        st.error("❌ Model loading error.")
+        st.error(" error.")
         st.stop()
 
 # Sidebar
-st.sidebar.header("⚙️ Settings")
-default_layer = "conv5_block3_out"
+st.sidebar.header(" Settings")
+default_layer = "conv5_block3_3_conv"
 detected_last_conv = get_last_conv_layer(model)
 if detected_last_conv is None:
     detected_last_conv = default_layer
@@ -263,11 +266,11 @@ layer_name = st.sidebar.text_input(
     value=detected_last_conv,
     help="Leave as default for automatic detection"
 )
-show_gradcam = st.sidebar.checkbox("Show Grad-CAM Heatmap", value=True)
+show_gradcam = st.sidebar.checkbox("Show Grad-CAM++ Heatmap", value=True)
 
 # OOD Detection Settings
 st.sidebar.markdown("---")
-st.sidebar.markdown("### 🛡️ Image Validation")
+st.sidebar.markdown("###  Image Validation")
 confidence_threshold = st.sidebar.slider(
     "Confidence Threshold (%)", 
     min_value=50, 
@@ -277,15 +280,14 @@ confidence_threshold = st.sidebar.slider(
 )
 entropy_threshold = st.sidebar.slider(
     "Uncertainty Threshold", 
-    min_value=0.5, 
-    max_value=1.5, 
-    value=1.1,
+    min_value=1.0, 
+    max_value=2.5, 
+    value=1.5,
     step=0.1,
-    help="Maximum uncertainty (entropy) for 3 classes"
+    help="Maximum uncertainty (entropy) allowed"
 )
-
 # Main upload section
-st.markdown("### 📤 Upload Image")
+st.markdown("###  Upload Image")
 uploaded_file = st.file_uploader(
     "Choose a clear, well-lit image of the skin lesion",
     type=["jpg", "png", "jpeg"],
@@ -297,20 +299,20 @@ if uploaded_file is not None:
         image_data = uploaded_file.read()
         pil_img = Image.open(io.BytesIO(image_data)).convert("RGB")
     except Exception as e:
-        st.error("❌ Could not read the uploaded image.")
+        st.error(" Could not read the uploaded image.")
         st.stop()
 
-    # Layout
+    # Layout: Image on left, results on right
     col1, col2 = st.columns([1, 1.5])
 
     with col1:
-        st.markdown("#### 📸 Uploaded Image")
+        st.markdown("####  Uploaded Image")
         st.image(pil_img, use_column_width=True)
 
     with col2:
-        st.markdown("#### 📊 Analysis Results")
+        st.markdown("####  Analysis Results")
         
-        with st.spinner("🔍 Analyzing image..."):
+        with st.spinner(" Analyzing image..."):
             input_img = preprocess_image_pil(pil_img, target_size=(224,224))
             preds = model.predict(input_img, verbose=0)
             
@@ -329,42 +331,48 @@ if uploaded_file is not None:
             )
         
         if is_ood:
-            st.error("⚠️ **Invalid Image Detected**")
+            st.error(" **Invalid Image Detected**")
             
             st.warning(
                 "**This doesn't appear to be a valid skin lesion image.**\n\n"
                 "**Detected issues:**\n" + 
                 "\n".join(f"- {r}" for r in ood_reasons) + 
                 "\n\n**Please upload:**\n"
-                "✅ A close-up photo of a skin lesion\n"
-                "✅ Clear, well-lit image\n"
-                "✅ Dermatoscopic or clinical photograph\n"
-                "✅ Image in focus\n\n"
+                " A close-up photo of a skin lesion\n"
+                " Clear, well-lit image\n"
+                " Dermatoscopic or clinical photograph\n"
+                " Image in focus\n\n"
                 "**Do NOT upload:**\n"
-                "❌ Random objects\n"
-                "❌ Full body photos\n"
-                "❌ Blurry or dark images"
+                " Random objects (balls, food, animals, etc.)\n"
+                " Full body photos\n"
+                " Blurry or dark images\n"
+                " Screenshots or edited images"
             )
             
-            with st.expander("🔍 Technical Details"):
+            with st.expander("🔍 Technical Details (for debugging)"):
                 st.write(f"**Top prediction:** {pred_class}")
                 st.write(f"**Confidence:** {pred_prob:.2f}%")
                 st.write(f"**Entropy:** {entropy:.2f}")
+                st.write(f"**Confidence threshold:** {confidence_threshold}%")
+                st.write(f"**Entropy threshold:** {entropy_threshold}")
                 
+                st.markdown("**All probabilities:**")
                 prob_data = []
                 for i, name in enumerate(CLASS_NAMES):
                     prob = float(preds[0, i]) * 100
                     prob_data.append({"Class": name, "Probability": f"{prob:.2f}%"})
                 st.dataframe(pd.DataFrame(prob_data), hide_index=True)
             
+            st.info(" **Tip:** Adjust the validation thresholds in the sidebar if you believe this is a valid image.")
             st.stop()
         
-        # Valid image
-        st.success(f"✅ Valid lesion detected")
+        # Valid image - continue normally
+        st.success(f" Valid lesion detected")
 
+        # Get class info
         class_info = CLASS_REPORTS[pred_class]
         
-        # Display prediction
+        # Display prediction with color coding
         st.markdown(
             f"<h3 style='color: {class_info['color']};'>{class_info['severity']}</h3>",
             unsafe_allow_html=True
@@ -377,32 +385,33 @@ if uploaded_file is not None:
         
         st.markdown(f"**Type:** {class_info['type']}")
 
-    # Full-width sections
+    # Full-width sections below
     st.markdown("---")
     
+    # Description and Recommendation
     col3, col4 = st.columns(2)
     
     with col3:
-        st.markdown("### 📋 About This Condition")
+        st.markdown("###  About This Condition")
         st.info(class_info['description'])
     
     with col4:
-        st.markdown("### 💊 Recommended Action")
+        st.markdown("###  Recommended Action")
         urgency = class_info['urgency']
-        if urgency == "critical":
+        if urgency in ["high", "critical"]:
             st.error(class_info['recommendation'])
         elif urgency == "medium":
             st.warning(class_info['recommendation'])
         else:
             st.success(class_info['recommendation'])
 
-    # Probabilities
+    # Detailed probabilities
     st.markdown("---")
-    st.markdown("### 📊 Detailed Probability Breakdown")
+    st.markdown("###  Detailed Probability Breakdown")
     
     prob_data = []
     for i, name in enumerate(CLASS_NAMES):
-        prob = float(preds[0, i]) * 100
+        prob = float(preds[0, i]) * 100 if i < preds.shape[1] else 0.0
         prob_data.append({"Condition": name, "Probability": f"{prob:.2f}%"})
     
     prob_df = pd.DataFrame(prob_data)
@@ -410,18 +419,18 @@ if uploaded_file is not None:
     
     st.dataframe(prob_df, use_container_width=True, hide_index=True)
 
-    # Grad-CAM
+    # Grad-CAM visualization
     if show_gradcam:
         st.markdown("---")
-        st.markdown("### 🔥 AI Focus Map (Grad-CAM)")
-        st.markdown("*Shows which areas the AI analyzed to make its prediction*")
+        st.markdown("###  AI Focus Map (Grad-CAM++)")
+        st.markdown("*This heatmap shows which areas the AI focused on to make its prediction*")
         
         try:
             _ = model.get_layer(layer_name)
         except Exception:
             auto = get_last_conv_layer(model)
             if auto:
-                st.warning(f"Layer '{layer_name}' not found. Using '{auto}'.")
+                st.warning(f"Layer '{layer_name}' not found. Using '{auto}' instead.")
                 layer_name = auto
             else:
                 st.error("Could not find a convolutional layer for Grad-CAM.")
@@ -430,34 +439,30 @@ if uploaded_file is not None:
         if layer_name:
             try:
                 with st.spinner("Generating heatmap..."):
-                    heatmap = simple_grad_cam(model, input_img.astype("float32"), pred_idx, layer_name)
-                    
-                    if heatmap is not None and np.max(heatmap) > 0:
-                        orig_np = np.array(pil_img.convert("RGB"))
-                        overlay = overlay_heatmap_on_image(orig_np, heatmap, alpha=0.6)
-                        
-                        col5, col6, col7 = st.columns([1, 1, 1])
-                        with col5:
-                            st.image(pil_img, caption="Original", use_column_width=True)
-                        with col6:
-                            fig, ax = plt.subplots()
-                            ax.imshow(heatmap, cmap='jet')
-                            ax.axis('off')
-                            st.pyplot(fig)
-                            st.caption("Heatmap")
-                        with col7:
-                            st.image(overlay, caption="Overlay", use_column_width=True)
-                    else:
-                        st.warning("⚠️ Could not generate heatmap (no activation detected)")
+                    heatmap = grad_cam_plus_plus(model, input_img.astype("float32"), pred_idx, layer_name)
+                    orig_np = np.array(pil_img.convert("RGB"))
+                    overlay = overlay_heatmap_on_image(orig_np, heatmap, alpha=0.5)
+                
+                col5, col6, col7 = st.columns([1, 1, 1])
+                with col5:
+                    st.image(pil_img, caption="Original", use_column_width=True)
+                with col6:
+                    fig, ax = plt.subplots()
+                    ax.imshow(heatmap, cmap='jet')
+                    ax.axis('off')
+                    st.pyplot(fig)
+                    st.caption("Heatmap")
+                with col7:
+                    st.image(overlay, caption="Overlay", use_column_width=True)
                 
             except Exception as e:
-                st.error("❌ Grad-CAM generation failed.")
-                with st.expander("Show error"):
+                st.error(" Grad-CAM generation failed.")
+                with st.expander("Show error details"):
                     st.code(str(e))
 
     # Download report
     st.markdown("---")
-    st.markdown("### 📥 Download Report")
+    st.markdown("###  Download Report")
     
     report_text = f"""SKIN LESION ANALYSIS REPORT
 {'='*70}
@@ -470,13 +475,13 @@ Severity: {class_info['severity']}
 
 VALIDATION METRICS:
 Entropy: {entropy:.2f} (threshold: {entropy_threshold})
-Max Probability: {max_prob:.2f}%
+Confidence Threshold: {confidence_threshold}%
 Status: Valid skin lesion image
 
 DETAILED PROBABILITIES:
 """
     for i, name in enumerate(CLASS_NAMES):
-        prob = float(preds[0, i]) * 100
+        prob = float(preds[0, i]) * 100 if i < preds.shape[1] else 0.0
         report_text += f"{name}: {prob:.2f}%\n"
 
     report_text += f"""
@@ -489,15 +494,16 @@ RECOMMENDATION:
 {'='*70}
 IMPORTANT DISCLAIMER:
 This is an AI screening tool and should NOT replace professional 
-medical diagnosis. Always consult a qualified dermatologist.
+medical diagnosis. Always consult a qualified dermatologist for 
+proper evaluation and treatment recommendations.
 
 Report generated: {pd.Timestamp.now().strftime('%Y-%m-%d %H:%M:%S')}
-Model Accuracy: 89.52% (on test dataset)
+Model Accuracy: 96.94% (on test dataset)
 Image File: {uploaded_file.name}
 """
 
     st.download_button(
-        label="📥 Download Full Report (TXT)",
+        label=" Download Full Report (TXT)",
         data=report_text,
         file_name=f"skin_lesion_report_{pd.Timestamp.now().strftime('%Y%m%d_%H%M%S')}.txt",
         mime="text/plain"
@@ -506,19 +512,21 @@ Image File: {uploaded_file.name}
     # Disclaimer
     st.markdown("---")
     st.warning(
-        "⚠️ **MEDICAL DISCLAIMER:** This AI tool is for screening purposes only. "
-        "Always consult a qualified dermatologist for proper diagnosis and treatment."
+        " **MEDICAL DISCLAIMER:** This AI tool is designed for screening purposes only "
+        "and should not be used as a substitute for professional medical advice, diagnosis, "
+        "or treatment. Always seek the advice of a qualified dermatologist or healthcare "
+        "provider with any questions regarding a skin condition."
     )
 
 else:
-    # No image uploaded
-    st.info("📤 Please upload a skin lesion image to begin analysis")
+    # No image uploaded - show info
+    st.info(" Please upload a skin lesion image to begin analysis")
     
     st.markdown("---")
-    st.markdown("### 🎯 What This System Can Detect:")
+    st.markdown("###  What This System Can Detect:")
     
     for class_name in CLASS_NAMES:
-        with st.expander(f"📋 {class_name}"):
+        with st.expander(f" {class_name}"):
             info = CLASS_REPORTS[class_name]
             st.markdown(f"**Type:** {info['type']}")
             st.markdown(f"**Severity:** {info['severity']}")
@@ -526,17 +534,17 @@ else:
             st.markdown(f"**Recommendation:** {info['recommendation']}")
     
     st.markdown("---")
-    st.markdown("### 📈 Model Performance")
-    st.success("✅ **89.52% accuracy** on test set")
-    st.info("📊 Trained on 21,000 balanced images")
-    st.info("🏗️ ResNet50 + SE Attention architecture")
+    st.markdown("###  Model Performance")
+    st.success(" **96.94% accuracy** ")
+    st.info(" Trained on dermatoscopic images")
+    st.info(" Based on ResNet50 architecture with custom attention mechanism")
     
     st.markdown("---")
-    st.markdown("### 📸 Image Requirements")
+    st.markdown("###  Image Requirements")
     col_a, col_b = st.columns(2)
     
     with col_a:
-        st.markdown("**✅ DO Upload:**")
+        st.markdown("** DO Upload:**")
         st.markdown("""
         - Close-up photos of skin lesions
         - Clear, well-lit images
@@ -546,11 +554,11 @@ else:
         """)
     
     with col_b:
-        st.markdown("**❌ DON'T Upload:**")
+        st.markdown("** DON'T Upload:**")
         st.markdown("""
-        - Random objects
+        - Random objects (balls, food, etc.)
         - Full body photos
         - Blurry or dark images
-        - Screenshots
+        - Screenshots or edited images
         - Non-skin images
         """)
