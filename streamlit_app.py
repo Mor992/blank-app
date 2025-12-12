@@ -122,12 +122,35 @@ def preprocess_image_pil(pil_img: Image.Image, target_size=(224,224)):
     return np.expand_dims(arr, axis=0)
 
 def overlay_heatmap_on_image(original_image_np, heatmap, alpha=0.5):
-    hmap = cv2.resize(heatmap, (original_image_np.shape[1], original_image_np.shape[0]))
+    """Overlay heatmap with robust error handling."""
+    # ✅ FIX: Validate heatmap
+    if heatmap is None or heatmap.size == 0:
+        return original_image_np
+    
+    # ✅ FIX: Ensure heatmap is 2D
+    if len(heatmap.shape) > 2:
+        heatmap = np.squeeze(heatmap)
+    
+    if len(heatmap.shape) != 2:
+        print(f"Invalid heatmap dimensions: {heatmap.shape}")
+        return original_image_np
+    
+    # ✅ FIX: Ensure float32 for cv2.resize
+    heatmap = heatmap.astype(np.float32)
+    
+    try:
+        hmap = cv2.resize(heatmap, (original_image_np.shape[1], original_image_np.shape[0]))
+    except Exception as e:
+        print(f"Resize error: {e}, heatmap shape: {heatmap.shape}")
+        return original_image_np
+    
     hmap = np.uint8(255 * hmap)
     hmap_color = cv2.applyColorMap(hmap, cv2.COLORMAP_JET)
     hmap_color = cv2.cvtColor(hmap_color, cv2.COLOR_BGR2RGB)
+    
     overlay = (original_image_np.astype("float32") * (1 - alpha) + hmap_color.astype("float32") * alpha)
     overlay = np.clip(overlay, 0, 255).astype("uint8")
+    
     return overlay
 
 def get_last_conv_layer(model: tf.keras.Model) -> Optional[str]:
@@ -173,11 +196,15 @@ def check_if_out_of_distribution(predictions, confidence_threshold=70.0, entropy
     return is_ood, reasons, entropy, max_prob
 
 def simple_grad_cam(model, image, class_idx, layer_name='conv5_block3_out'):
-    """Simple Grad-CAM implementation."""
-    grad_model = tf.keras.models.Model(
-        [model.inputs],
-        [model.get_layer(layer_name).output, model.output]
-    )
+    """Simple Grad-CAM implementation with robust error handling."""
+    try:
+        grad_model = tf.keras.models.Model(
+            [model.inputs],
+            [model.get_layer(layer_name).output, model.output]
+        )
+    except Exception as e:
+        print(f"Error creating grad model: {e}")
+        return None
     
     with tf.GradientTape() as tape:
         conv_outputs, predictions = grad_model(image)
@@ -191,6 +218,7 @@ def simple_grad_cam(model, image, class_idx, layer_name='conv5_block3_out'):
     grads = tape.gradient(loss, conv_outputs)
     
     if grads is None:
+        print("No gradients computed")
         return None
     
     # Pool gradients
@@ -201,13 +229,28 @@ def simple_grad_cam(model, image, class_idx, layer_name='conv5_block3_out'):
     heatmap = conv_outputs @ pooled_grads[..., tf.newaxis]
     heatmap = tf.squeeze(heatmap)
     
-    # Normalize
-    heatmap = tf.maximum(heatmap, 0)
-    max_val = tf.reduce_max(heatmap)
-    if max_val > 0:
-        heatmap /= max_val
+    # ✅ FIX: Ensure heatmap is 2D
+    if len(heatmap.shape) > 2:
+        heatmap = tf.reduce_mean(heatmap, axis=-1)  # Average extra dimensions
     
-    return heatmap.numpy()
+    # Convert to numpy
+    heatmap = heatmap.numpy()
+    
+    # ✅ FIX: Check heatmap validity
+    if heatmap.size == 0 or heatmap.ndim != 2:
+        print(f"Invalid heatmap shape: {heatmap.shape}")
+        return None
+    
+    # Normalize
+    heatmap = np.maximum(heatmap, 0)
+    max_val = np.max(heatmap)
+    if max_val > 0:
+        heatmap = heatmap / max_val
+    else:
+        print("Heatmap is all zeros")
+        return None
+    
+    return heatmap
 
 @st.cache_resource(show_spinner=False)
 def get_model(download_if_missing: bool = True):
@@ -411,45 +454,59 @@ if uploaded_file is not None:
     st.dataframe(prob_df, use_container_width=True, hide_index=True)
 
     # Grad-CAM
-    if show_gradcam:
-        st.markdown("---")
-        st.markdown("### 🔥 AI Focus Map (Grad-CAM)")
-        st.markdown("*Shows which areas the AI analyzed to make its prediction*")
-        
+# Grad-CAM
+if show_gradcam:
+    st.markdown("---")
+    st.markdown("### 🔥 AI Focus Map (Grad-CAM)")
+    st.markdown("*Shows which areas the AI analyzed to make its prediction*")
+    
+    # Try multiple layers if first fails
+    layers_to_try = [layer_name, 'conv5_block3_out', 'conv5_block2_out', 'conv4_block6_out']
+    heatmap = None
+    used_layer = None
+    
+    for try_layer in layers_to_try:
         try:
-            _ = model.get_layer(layer_name)
-        except Exception:
-            auto = get_last_conv_layer(model)
-            if auto:
-                st.warning(f"Layer '{layer_name}' not found. Using '{auto}'.")
-                layer_name = auto
-            else:
-                st.error("Could not find a convolutional layer for Grad-CAM.")
-                layer_name = None
-
-        if layer_name:
-            try:
-                with st.spinner("Generating heatmap..."):
-                    heatmap = simple_grad_cam(model, input_img.astype("float32"), pred_idx, layer_name)
-                    
-                    if heatmap is not None and np.max(heatmap) > 0:
-                        orig_np = np.array(pil_img.convert("RGB"))
-                        overlay = overlay_heatmap_on_image(orig_np, heatmap, alpha=0.6)
-                        
-                        col5, col6, col7 = st.columns([1, 1, 1])
-                        with col5:
-                            st.image(pil_img, caption="Original", use_column_width=True)
-                        with col6:
-                            fig, ax = plt.subplots()
-                            ax.imshow(heatmap, cmap='jet')
-                            ax.axis('off')
-                            st.pyplot(fig)
-                            st.caption("Heatmap")
-                        with col7:
-                            st.image(overlay, caption="Overlay", use_column_width=True)
-                    else:
-                        st.warning("⚠️ Could not generate heatmap (no activation detected)")
+            _ = model.get_layer(try_layer)
+            with st.spinner(f"Generating heatmap using {try_layer}..."):
+                heatmap = simple_grad_cam(model, input_img.astype("float32"), pred_idx, try_layer)
                 
+                if heatmap is not None and np.max(heatmap) > 0:
+                    used_layer = try_layer
+                    break
+        except Exception as e:
+            continue
+    
+    if heatmap is not None and used_layer is not None:
+        try:
+            orig_np = np.array(pil_img.convert("RGB"))
+            overlay = overlay_heatmap_on_image(orig_np, heatmap, alpha=0.6)
+            
+            if used_layer != layer_name:
+                st.info(f"ℹ️ Using layer: {used_layer}")
+            
+            col5, col6, col7 = st.columns([1, 1, 1])
+            
+            with col5:
+                st.image(pil_img, caption="Original", use_column_width=True)
+            
+            with col6:
+                fig, ax = plt.subplots(figsize=(5, 5))
+                ax.imshow(heatmap, cmap='jet')
+                ax.axis('off')
+                st.pyplot(fig)
+                plt.close(fig)
+                st.caption("Heatmap")
+            
+            with col7:
+                st.image(overlay, caption="Overlay", use_column_width=True)
+            
+        except Exception as e:
+            st.error("❌ Grad-CAM visualization failed.")
+            with st.expander("Show error"):
+                st.code(str(e))
+    else:
+        st.warning("⚠️ Could not generate Grad-CAM heatmap. This may happen with certain layer configurations.")
             except Exception as e:
                 st.error("❌ Grad-CAM generation failed.")
                 with st.expander("Show error"):
