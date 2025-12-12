@@ -454,59 +454,59 @@ if uploaded_file is not None:
     st.dataframe(prob_df, use_container_width=True, hide_index=True)
 
     # Grad-CAM
-# Grad-CAM
-if show_gradcam:
-    st.markdown("---")
-    st.markdown("### 🔥 AI Focus Map (Grad-CAM)")
-    st.markdown("*Shows which areas the AI analyzed to make its prediction*")
-    
-    # Try multiple layers if first fails
-    layers_to_try = [layer_name, 'conv5_block3_out', 'conv5_block2_out', 'conv4_block6_out']
-    heatmap = None
-    used_layer = None
-    
-    for try_layer in layers_to_try:
-        try:
-            _ = model.get_layer(try_layer)
-            with st.spinner(f"Generating heatmap using {try_layer}..."):
-                heatmap = simple_grad_cam(model, input_img.astype("float32"), pred_idx, try_layer)
+    # Grad-CAM
+    if show_gradcam:
+        st.markdown("---")
+        st.markdown("### 🔥 AI Focus Map (Grad-CAM)")
+        st.markdown("*Shows which areas the AI analyzed to make its prediction*")
+        
+        # Try multiple layers if first fails
+        layers_to_try = [layer_name, 'conv5_block3_out', 'conv5_block2_out', 'conv4_block6_out']
+        heatmap = None
+        used_layer = None
+        
+        for try_layer in layers_to_try:
+            try:
+                _ = model.get_layer(try_layer)
+                with st.spinner(f"Generating heatmap using {try_layer}..."):
+                    heatmap = simple_grad_cam(model, input_img.astype("float32"), pred_idx, try_layer)
+                    
+                    if heatmap is not None and np.max(heatmap) > 0:
+                        used_layer = try_layer
+                        break
+            except Exception as e:
+                continue
+        
+        if heatmap is not None and used_layer is not None:
+            try:
+                orig_np = np.array(pil_img.convert("RGB"))
+                overlay = overlay_heatmap_on_image(orig_np, heatmap, alpha=0.6)
                 
-                if heatmap is not None and np.max(heatmap) > 0:
-                    used_layer = try_layer
-                    break
-        except Exception as e:
-            continue
-    
-    if heatmap is not None and used_layer is not None:
-        try:
-            orig_np = np.array(pil_img.convert("RGB"))
-            overlay = overlay_heatmap_on_image(orig_np, heatmap, alpha=0.6)
-            
-            if used_layer != layer_name:
-                st.info(f"ℹ️ Using layer: {used_layer}")
-            
-            col5, col6, col7 = st.columns([1, 1, 1])
-            
-            with col5:
-                st.image(pil_img, caption="Original", use_column_width=True)
-            
-            with col6:
-                fig, ax = plt.subplots(figsize=(5, 5))
-                ax.imshow(heatmap, cmap='jet')
-                ax.axis('off')
-                st.pyplot(fig)
-                plt.close(fig)
-                st.caption("Heatmap")
-            
-            with col7:
-                st.image(overlay, caption="Overlay", use_column_width=True)
-            
-        except Exception as e:
-            st.error("❌ Grad-CAM visualization failed.")
-            with st.expander("Show error"):
-                st.code(str(e))
-    else:
-        st.warning("⚠️ Could not generate Grad-CAM heatmap. This may happen with certain layer configurations.")
+                if used_layer != layer_name:
+                    st.info(f"ℹ️ Using layer: {used_layer}")
+                
+                col5, col6, col7 = st.columns([1, 1, 1])
+                
+                with col5:
+                    st.image(pil_img, caption="Original", use_column_width=True)
+                
+                with col6:
+                    fig, ax = plt.subplots(figsize=(5, 5))
+                    ax.imshow(heatmap, cmap='jet')
+                    ax.axis('off')
+                    st.pyplot(fig)
+                    plt.close(fig)
+                    st.caption("Heatmap")
+                
+                with col7:
+                    st.image(overlay, caption="Overlay", use_column_width=True)
+                
+            except Exception as e:
+                st.error("❌ Grad-CAM visualization failed.")
+                with st.expander("Show error"):
+                    st.code(str(e))
+        else:
+            st.warning("⚠️ Could not generate Grad-CAM heatmap. This may happen with certain layer configurations.")
             except Exception as e:
                 st.error("❌ Grad-CAM generation failed.")
                 with st.expander("Show error"):
