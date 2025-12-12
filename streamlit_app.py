@@ -307,7 +307,7 @@ entropy_threshold = st.sidebar.slider(
 st.markdown("---")
 st.markdown("### Image Requirements")
 col_a, col_b = st.columns(2)
-    with col_a:
+with col_a:
         st.markdown("**DO Upload:**")
         st.markdown("""
         - Close-up photos of skin lesions
@@ -317,7 +317,7 @@ col_a, col_b = st.columns(2)
         - Images in focus
         """)
     
-    with col_b:
+with col_b:
         st.markdown("**DON'T Upload:**")
         st.markdown("""
         - Random objects
