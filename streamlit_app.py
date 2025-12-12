@@ -122,13 +122,25 @@ def preprocess_image_pil(pil_img: Image.Image, target_size=(224,224)):
     return np.expand_dims(arr, axis=0)
 
 def overlay_heatmap_on_image(original_image_np, heatmap, alpha=0.5):
-    hmap = cv2.resize(heatmap, (original_image_np.shape[1], original_image_np.shape[0]))
+    if heatmap is None or heatmap.size == 0:
+        return None
+
+    if np.isnan(heatmap).any() or np.isinf(heatmap).any():
+        return None
+
+    try:
+        hmap = cv2.resize(heatmap, (original_image_np.shape[1], original_image_np.shape[0]))
+    except Exception:
+        return None
+
     hmap = np.uint8(255 * hmap)
     hmap_color = cv2.applyColorMap(hmap, cv2.COLORMAP_JET)
     hmap_color = cv2.cvtColor(hmap_color, cv2.COLOR_BGR2RGB)
-    overlay = (original_image_np.astype("float32") * (1 - alpha) + hmap_color.astype("float32") * alpha)
-    overlay = np.clip(overlay, 0, 255).astype("uint8")
-    return overlay
+
+    overlay = (original_image_np.astype("float32") * (1 - alpha) +
+               hmap_color.astype("float32") * alpha)
+
+    return np.clip(overlay, 0, 255).astype("uint8")
 
 def get_last_conv_layer(model: tf.keras.Model) -> Optional[str]:
     """Find the last convolutional layer name in the model."""
@@ -253,7 +265,7 @@ with st.spinner("Loading model..."):
 
 # Sidebar
 st.sidebar.header("⚙️ Settings")
-default_layer = "conv5_block3_out"
+default_layer = detected_last_conv
 detected_last_conv = get_last_conv_layer(model)
 if detected_last_conv is None:
     detected_last_conv = default_layer
@@ -264,6 +276,7 @@ layer_name = st.sidebar.text_input(
     help="Leave as default for automatic detection"
 )
 show_gradcam = st.sidebar.checkbox("Show Grad-CAM Heatmap", value=True)
+st.sidebar.write("Detected last conv layer:", detected_last_conv)
 
 # OOD Detection Settings
 st.sidebar.markdown("---")
@@ -436,6 +449,11 @@ if uploaded_file is not None:
                         orig_np = np.array(pil_img.convert("RGB"))
                         overlay = overlay_heatmap_on_image(orig_np, heatmap, alpha=0.6)
                         
+                        if overlay is None:
+                            st.warning(" Could not generate overlay heatmap.")
+                        else:
+                            st.image(overlay, caption="Overlay", use_column_width=True)
+                                                
                         col5, col6, col7 = st.columns([1, 1, 1])
                         with col5:
                             st.image(pil_img, caption="Original", use_column_width=True)
