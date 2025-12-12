@@ -507,11 +507,7 @@ if uploaded_file is not None:
                     st.code(str(e))
         else:
             st.warning("⚠️ Could not generate Grad-CAM heatmap. This may happen with certain layer configurations.")
-            except Exception as e:
-                st.error("❌ Grad-CAM generation failed.")
-                with st.expander("Show error"):
-                    st.code(str(e))
-
+            
     # Download report
     st.markdown("---")
     st.markdown("### 📥 Download Report")
