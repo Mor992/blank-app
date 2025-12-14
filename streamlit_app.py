@@ -13,8 +13,8 @@ import cv2
 import matplotlib.pyplot as plt
 import pandas as pd
 
-DRIVE_FILE_ID = "1jeQ_juU_JjER89SCAoFseFRbVzZJNFYj"
-MODEL_LOCAL_NAME = "best_resnet.keras"                 
+DRIVE_FILE_ID = "1ACwdcCWtBh4X_ERjWy-0sVM0H54A-az6"
+MODEL_LOCAL_NAME = "skin_lesion_best_model.keras"                 
 MODEL_ZIP_NAME = "model_download.zip"               
 MODEL_IS_ZIP = False 
 
